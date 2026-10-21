@@ -140,7 +140,7 @@ func getBrokers(svc kafkaClient, c types.ClusterInfo) ([]brokerDetails, error) {
 					NodeExporter: *c.OpenMonitoring.Prometheus.NodeExporter.EnabledInBroker,
 				}
 				brokers = append(brokers, details)
-			} else if b.ControllerNodeInfo != nil {
+			} else if b.ControllerNodeInfo != nil && len(b.ControllerNodeInfo.Endpoints) > 0 {
 				details := brokerDetails{
 					Endpoint:    b.ControllerNodeInfo.Endpoints[0],
 					JmxExporter: *c.OpenMonitoring.Prometheus.JmxExporter.EnabledInBroker,

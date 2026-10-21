@@ -13,11 +13,12 @@ import (
 )
 
 type mockCluster struct {
-	brokerCount  int
-	clusterName  string
-	jmxExporter  bool
-	nodeExporter bool
-	kraft        bool
+	brokerCount                   int
+	clusterName                   string
+	jmxExporter                   bool
+	nodeExporter                  bool
+	kraft                         bool
+	kraftEmptyControllerEndpoints bool
 }
 
 type mockKafkaClient struct{ clusters map[string]mockCluster }
@@ -60,9 +61,13 @@ func (m mockKafkaClient) ListNodes(ctx context.Context, params *kafka.ListNodesI
 
 	if cluster.kraft {
 		for i := 1; i <= cluster.brokerCount; {
+			var endpoints []string
+			if !cluster.kraftEmptyControllerEndpoints {
+				endpoints = []string{fmt.Sprintf("c-1000%v.broker.com", i)}
+			}
 			n := types.NodeInfo{
 				NodeType:           "CONTROLLER",
-				ControllerNodeInfo: &types.ControllerNodeInfo{Endpoints: []string{fmt.Sprintf("c-1000%v.broker.com", i)}},
+				ControllerNodeInfo: &types.ControllerNodeInfo{Endpoints: endpoints},
 			}
 			nodeInfos = append(nodeInfos, n)
 			i++
@@ -189,6 +194,39 @@ func TestGetStaticConfigs(t *testing.T) {
 					Job:         "msk-my-other-cluster",
 					ClusterName: "my-other-cluster",
 					ClusterArn:  "arn:::my-other-cluster",
+				},
+			},
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("got %s want %s", got, want)
+		}
+	})
+
+	t.Run("OneClusterTwoBrokersFullMonitoringKraftNoControllerEndpoints", func(t *testing.T) {
+		var client mockKafkaClient
+		client.clusters = make(map[string]mockCluster)
+		client.clusters["arn:::my-cluster"] = mockCluster{
+			brokerCount:              2,
+			clusterName:              "my-cluster",
+			jmxExporter:              true,
+			nodeExporter:             true,
+			kraft:                    true,
+			kraftEmptyControllerEndpoints: true,
+		}
+
+		got, _ := GetStaticConfigs(client)
+		want := []PrometheusStaticConfig{
+			{
+				Targets: []string{
+					"b-1.broker.com:11001",
+					"b-1.broker.com:11002",
+					"b-2.broker.com:11001",
+					"b-2.broker.com:11002",
+				},
+				Labels: labels{
+					Job:         "msk-my-cluster",
+					ClusterName: "my-cluster",
+					ClusterArn:  "arn:::my-cluster",
 				},
 			},
 		}
